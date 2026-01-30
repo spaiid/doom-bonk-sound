@@ -2,11 +2,8 @@ package com.DoomBonkSound;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.inject.Provides;
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import javax.inject.Inject;
-import javax.sound.sampled.*;
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.NPC;
@@ -21,6 +18,9 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.audio.AudioPlayer;
+
+
 
 @Slf4j
 @PluginDescriptor(
@@ -36,6 +36,8 @@ public class DoomBonkSoundPlugin extends Plugin
 	@Inject private Client client;
 	@Inject private DoomBonkSoundConfig config;
 	@Inject private ItemManager itemManager;
+	@Inject private AudioPlayer audioPlayer;
+
 
 	@Provides
 	DoomBonkSoundConfig provideConfig(ConfigManager configManager)
@@ -43,40 +45,10 @@ public class DoomBonkSoundPlugin extends Plugin
 		return configManager.getConfig(DoomBonkSoundConfig.class);
 	}
 
-	private Clip interruptClip;
 
 	private boolean doomWasCharging = false;
 	private int lastMeleeSwingTick = -9999;
 	private int lastInterruptTick = -9999;
-
-	@Override
-	protected void startUp()
-	{
-		try
-		{
-			interruptClip = loadClip("/sounds/doom_interrupt.wav");
-		}
-		catch (Exception e)
-		{
-			log.warn("Failed to load interrupt clip", e);
-			interruptClip = null;
-		}
-	}
-
-	@Override
-	protected void shutDown()
-	{
-		if (interruptClip != null)
-		{
-			interruptClip.stop();
-			interruptClip.close();
-			interruptClip = null;
-		}
-
-		doomWasCharging = false;
-		lastMeleeSwingTick = -9999;
-		lastInterruptTick = -9999;
-	}
 
 	@Subscribe
 	public void onGameTick(GameTick tick)
@@ -188,51 +160,23 @@ public class DoomBonkSoundPlugin extends Plugin
 		return true; // assume melee
 	}
 
-	private Clip loadClip(String resourcePath)
-			throws IOException, UnsupportedAudioFileException, LineUnavailableException
-	{
-		try (InputStream is = getClass().getResourceAsStream(resourcePath))
-		{
-			if (is == null)
-			{
-				throw new IOException("Missing resource: " + resourcePath);
-			}
-
-			try (AudioInputStream ais = AudioSystem.getAudioInputStream(new BufferedInputStream(is)))
-			{
-				final Clip clip = AudioSystem.getClip();
-				clip.open(ais);
-				return clip;
-			}
-		}
-	}
-
-	private void applyGain(Clip clip, float gainDb)
-	{
-		if (clip == null)
-		{
-			return;
-		}
-
-		if (clip.isControlSupported(FloatControl.Type.MASTER_GAIN))
-		{
-			final FloatControl gain = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
-			final float clamped = Math.max(gain.getMinimum(), Math.min(gain.getMaximum(), gainDb));
-			gain.setValue(clamped);
-		}
-	}
 
 	private void playInterruptSound(float gainDb)
 	{
-		if (interruptClip == null)
+		if (audioPlayer == null)
 		{
 			return;
 		}
 
-		applyGain(interruptClip, gainDb);
-
-		interruptClip.stop();
-		interruptClip.setFramePosition(0);
-		interruptClip.start();
+		try
+		{
+			// Plays an audio stream loaded from a class resource path
+			audioPlayer.play(getClass(), "/sounds/doom_interrupt.wav", gainDb);
+		}
+		catch (Exception e)
+		{
+			log.debug("Failed to play interrupt sound", e);
+		}
 	}
+
 }
